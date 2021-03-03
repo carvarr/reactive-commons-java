@@ -1,10 +1,11 @@
 plugins {
-    id "com.jfrog.bintray" version "1.8.4"
+    id "com.jfrog.bintray" version "1.8.5"
     id 'java-library'
     id 'maven'
     id 'maven-publish'
 }
 
+test.onlyIf { true }
 
 def pomConfig = {
     licenses {
@@ -18,7 +19,7 @@ def pomConfig = {
         developer {
             id "danielbustamante"
             name "Daniel Bustamante Ospina"
-            email "daniel.bustamante@sofka.com.co"
+            email "danibust@bancolombia.com.co"
         }
     }
 
@@ -72,7 +73,10 @@ bintray {
 }
 
 dependencies {
-    compile project(":async-commons")
-    api('org.springframework.boot:spring-boot-starter')
+    api project(":async-commons")
+    compileOnly('org.springframework.boot:spring-boot-starter')
+
+    annotationProcessor 'org.springframework.boot:spring-boot-configuration-processor'
+
     testImplementation 'io.projectreactor:reactor-test'
 }

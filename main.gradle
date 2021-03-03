@@ -36,14 +36,19 @@ subprojects {
         testCompileOnly 'org.projectlombok:lombok'
     }
 
+    jacocoTestReport {
+        reports {
+            xml.enabled true
+        }
+    }
 
-    jacoco {
-        toolVersion = '0.8.2'
+    test {
+        useJUnitPlatform()
     }
 
     dependencyManagement {
         imports {
-            mavenBom "org.springframework.boot:spring-boot-gradle-plugin:${springBootVersion}"
+            mavenBom "org.springframework.boot:spring-boot-dependencies:$springBootVersion"
         }
     }
 }

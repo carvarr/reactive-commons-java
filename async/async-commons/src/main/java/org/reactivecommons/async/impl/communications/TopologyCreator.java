@@ -1,17 +1,16 @@
 package org.reactivecommons.async.impl.communications;
 
 import com.rabbitmq.client.AMQP;
-import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.Connection;
 import lombok.extern.java.Log;
 import reactor.core.publisher.Mono;
 import reactor.rabbitmq.BindingSpecification;
 import reactor.rabbitmq.ExchangeSpecification;
 import reactor.rabbitmq.QueueSpecification;
+import reactor.rabbitmq.Sender;
 
-import java.io.IOException;
-import java.time.Duration;
-import java.util.logging.Level;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Optional;
 
 @Log
 /*
@@ -19,63 +18,68 @@ import java.util.logging.Level;
  */
 public class TopologyCreator {
 
-    private final Mono<Channel> channel;
+    private final Sender sender;
 
-    public TopologyCreator(Mono<Connection> connectionMono) {
-        this.channel = connectionMono.map(connection -> {
-            try {
-                return connection.createChannel();
-            } catch (IOException e) {
-                throw new TopologyDefException("Fail to create channel", e);
-            }
-        }).doOnError(e -> log.log(Level.SEVERE, e.getMessage(), e))
-        .retryBackoff(5, Duration.ofMillis(500))
-        .cache();
+    public TopologyCreator(Sender sender) {
+        this.sender = sender;
     }
 
-    public Mono<AMQP.Exchange.DeclareOk> declare(ExchangeSpecification exchange){
-        return channel.map(ch -> {
-            try {
-                return ch.exchangeDeclare(exchange.getName(), exchange.getType(), exchange.isDurable(), exchange.isAutoDelete(), exchange.getArguments());
-            } catch (IOException e) {
-                throw new TopologyDefException("Fail to declare exchange: " + exchange.getName(), e);
-            }
-        });
+    public Mono<AMQP.Exchange.DeclareOk> declare(ExchangeSpecification exchange) {
+        return sender.declare(exchange)
+                .onErrorMap(TopologyDefException::new);
     }
 
-    public Mono<AMQP.Queue.DeclareOk> declare(QueueSpecification queue){
-        return channel.map(ch -> {
-            try {
-                return ch.queueDeclare(queue.getName(), queue.isDurable(), queue.isExclusive(), queue.isAutoDelete(), queue.getArguments());
-            } catch (IOException e) {
-                throw new TopologyDefException("Fail to declare queue: " + queue.getName(), e);
-            }
-        });
+    public Mono<AMQP.Queue.DeclareOk> declare(QueueSpecification queue) {
+        return sender.declare(queue)
+                .onErrorMap(TopologyDefException::new);
     }
 
-    public Mono<AMQP.Queue.BindOk> bind(BindingSpecification binding){
-        return channel.map(ch -> {
-            try {
-                return ch.queueBind(binding.getQueue(), binding.getExchange(), binding.getRoutingKey(), binding.getArguments());
-            } catch (IOException e) {
-                throw new TopologyDefException("Fail to bind queue: " + binding.getQueue(), e);
-            }
-        });
+    public Mono<AMQP.Queue.BindOk> bind(BindingSpecification binding) {
+        return sender.bind(binding)
+                .onErrorMap(TopologyDefException::new);
     }
 
     public Mono<AMQP.Queue.UnbindOk> unbind(BindingSpecification binding) {
-       return channel.map(ch -> {
-           try {
-               return ch.queueUnbind(binding.getQueue(), binding.getExchange(), binding.getRoutingKey(), binding.getArguments());
-           } catch (IOException e) {
-               throw new TopologyDefException("Fail to unbind queue: " + binding.getQueue(), e);
-           }
-       }) ;
+        return sender.unbind(binding)
+                .onErrorMap(TopologyDefException::new);
+    }
+
+    public Mono<AMQP.Queue.DeclareOk> declareDLQ(String originQueue, String retryTarget, int retryTime, Optional<Integer> maxLengthBytesOpt) {
+        final Map<String, Object> args = new HashMap<>();
+        args.put("x-dead-letter-exchange", retryTarget);
+        args.put("x-message-ttl", retryTime);
+        maxLengthBytesOpt.ifPresent(maxLengthBytes -> args.put("x-max-length-bytes", maxLengthBytes));
+        QueueSpecification specification = QueueSpecification.queue(originQueue + ".DLQ")
+                .durable(true)
+                .arguments(args);
+        return declare(specification);
+    }
+
+    public Mono<AMQP.Queue.DeclareOk> declareQueue(String name, String dlqExchange, Optional<Integer> maxLengthBytesOpt) {
+        final Map<String, Object> args = new HashMap<>();
+        args.put("x-dead-letter-exchange", dlqExchange);
+        maxLengthBytesOpt.ifPresent(maxLengthBytes -> args.put("x-max-length-bytes", maxLengthBytes));
+        QueueSpecification specification = QueueSpecification.queue(name)
+                .durable(true)
+                .arguments(args);
+        return declare(specification);
+    }
+
+    public Mono<AMQP.Queue.DeclareOk> declareQueue(String name, Optional<Integer> maxLengthBytesOpt) {
+        QueueSpecification specification = QueueSpecification.queue(name)
+                .durable(true);
+        if (maxLengthBytesOpt.isPresent()) {
+            final Map<String, Object> args = new HashMap<>();
+            args.put("x-max-length-bytes", maxLengthBytesOpt.orElse(0));
+            specification = specification.arguments(args);
+        }
+
+        return declare(specification);
     }
 
     public static class TopologyDefException extends RuntimeException {
-        public TopologyDefException(String message, Throwable cause) {
-            super(message, cause);
+        public TopologyDefException(Throwable cause) {
+            super(cause);
         }
     }
 }

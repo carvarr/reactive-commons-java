@@ -1,5 +1,5 @@
 plugins {
-    id "com.jfrog.bintray" version "1.8.4"
+    id "com.jfrog.bintray" version "1.8.5"
     id 'java-library'
     id 'maven'
     id 'maven-publish'
@@ -18,7 +18,7 @@ def pomConfig = {
         developer {
             id "danielbustamante"
             name "Daniel Bustamante Ospina"
-            email "daniel.bustamante@sofka.com.co"
+            email "danibust@bancolombia.com.co"
         }
     }
 
@@ -72,7 +72,7 @@ bintray {
 }
 
 dependencies {
-    compile project(":domain-events-api")
-    implementation 'io.projectreactor:reactor-core'
+    api project(":domain-events-api")
+    compileOnly 'io.projectreactor:reactor-core'
     testImplementation 'io.projectreactor:reactor-test'
 }

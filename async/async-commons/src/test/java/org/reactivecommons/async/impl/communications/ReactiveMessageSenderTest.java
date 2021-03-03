@@ -3,15 +3,15 @@ package org.reactivecommons.async.impl.communications;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import org.junit.Before;
-import org.junit.Test;
-import org.junit.runner.RunWith;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.Spy;
-import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.junit.jupiter.MockitoExtension;
 import org.reactivecommons.async.impl.converters.MessageConverter;
 import org.reactivecommons.async.impl.converters.json.JacksonMessageConverter;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.rabbitmq.OutboundMessageResult;
@@ -24,15 +24,12 @@ import java.util.HashMap;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest
-@RunWith(MockitoJUnitRunner.class)
+@ExtendWith(MockitoExtension.class)
 public class ReactiveMessageSenderTest {
 
     private final String sourceApplication = "TestApp";
 
     private ReactiveMessageSender messageSender;
-
-    private OutboundMessageResult result = new OutboundMessageResult(null, true);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -42,27 +39,31 @@ public class ReactiveMessageSenderTest {
     @Spy
     private final MessageConverter messageConverter = new JacksonMessageConverter(objectMapper);
 
-    @Before
+    @BeforeEach
     public void init() {
+        when(sender.sendWithTypedPublishConfirms(any(Publisher.class))).then(invocation -> {
+            final Flux<ReactiveMessageSender.MyOutboundMessage> argument = invocation.getArgument(0);
+            return argument.map(myOutboundMessage -> {
+                OutboundMessageResult<ReactiveMessageSender.MyOutboundMessage> outboundMessageResult = new OutboundMessageResult<>(myOutboundMessage, true);
+                return outboundMessageResult;
+            });
+        });
+        when(sender.send(any(Publisher.class))).thenReturn(Mono.empty());
         messageSender = new ReactiveMessageSender(sender, sourceApplication, messageConverter, null);
     }
 
 
     @Test
     public void sendWithConfirmEmptyNullMessage() {
-        when(sender.sendWithPublishConfirms(any())).thenReturn(Flux.just(result));
-
-        final Mono<Void> voidMono = messageSender.sendWithConfirm(null, "exchange", "rkey", new HashMap<>());
+        final Mono<Void> voidMono = messageSender.sendWithConfirm(null, "exchange", "rkey", new HashMap<>(), true);
 
         StepVerifier.create(voidMono).verifyComplete();
     }
 
     @Test
     public void sendWithConfirmSomeMessage() {
-        when(sender.sendWithPublishConfirms(any())).thenReturn(Flux.just(result));
-
         SomeClass some = new SomeClass("42", "Daniel", new Date());
-        final Mono<Void> voidMono = messageSender.sendWithConfirm(some, "exchange", "rkey", new HashMap<>());
+        final Mono<Void> voidMono = messageSender.sendWithConfirm(some, "exchange", "rkey", new HashMap<>(), true);
 
         StepVerifier.create(voidMono).verifyComplete();
     }

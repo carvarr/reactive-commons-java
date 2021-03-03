@@ -1,16 +1,10 @@
 package org.reactivecommons.test;
 
-import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.Mockito;
+import org.junit.jupiter.api.Test;
 import org.reactivecommons.api.domain.DomainEvent;
 import org.reactivecommons.api.domain.DomainEventBus;
-import org.reactivecommons.async.api.AsyncQuery;
-import org.reactivecommons.async.api.DirectAsyncGateway;
 import org.reactivecommons.async.api.DynamicRegistry;
-import org.reactivecommons.async.api.HandlerRegistry;
 import org.reactivecommons.async.api.handlers.EventHandler;
-import org.reactivecommons.async.impl.config.annotations.EnableDirectAsyncGateway;
 import org.reactivecommons.async.impl.config.annotations.EnableDomainEventBus;
 import org.reactivecommons.async.impl.config.annotations.EnableMessageListeners;
 import org.reactivestreams.Publisher;
@@ -19,18 +13,15 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Bean;
-import org.springframework.test.context.junit4.SpringRunner;
-import reactor.core.publisher.Mono;
 import reactor.core.publisher.UnicastProcessor;
 import reactor.test.StepVerifier;
 
 import java.time.Duration;
 
-import static reactor.core.publisher.Mono.*;
+import static reactor.core.publisher.Mono.from;
+import static reactor.core.publisher.Mono.fromRunnable;
 
 @SpringBootTest
-@RunWith(SpringRunner.class)
 public class DynamicRegistryTest {
 
     @Autowired
@@ -52,8 +43,8 @@ public class DynamicRegistryTest {
         from(emit).block();
 
         StepVerifier.create(result.next().timeout(Duration.ofSeconds(10)))
-            .expectNext("Hello")
-            .verifyComplete();
+                .expectNext("Hello")
+                .verifyComplete();
 
 
     }
@@ -62,7 +53,7 @@ public class DynamicRegistryTest {
     @SpringBootApplication
     @EnableMessageListeners
     @EnableDomainEventBus
-    static class App{
+    static class App {
         public static void main(String[] args) {
             SpringApplication.run(App.class, args);
         }

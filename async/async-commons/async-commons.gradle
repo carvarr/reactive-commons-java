@@ -1,5 +1,5 @@
 plugins {
-    id "com.jfrog.bintray" version "1.8.4"
+    id "com.jfrog.bintray" version "1.8.5"
     id 'java-library'
     id 'maven'
     id 'maven-publish'
@@ -18,7 +18,7 @@ def pomConfig = {
         developer {
             id "danielbustamante"
             name "Daniel Bustamante Ospina"
-            email "daniel.bustamante@sofka.com.co"
+            email "danibust@bancolombia.com.co"
         }
     }
 
@@ -72,11 +72,11 @@ bintray {
 }
 
 dependencies {
-    compile project(":async-commons-api")
-    compile project(":domain-events-api")
+    api project(":async-commons-api")
+    api project(":domain-events-api")
 
-    api 'io.projectreactor:reactor-core'
-    api "io.projectreactor.rabbitmq:reactor-rabbitmq:1.2.0.RELEASE"
-    api 'com.fasterxml.jackson.core:jackson-databind:2.9.7'
+    compileOnly 'io.projectreactor:reactor-core'
+    api ("io.projectreactor.rabbitmq:reactor-rabbitmq")
+    api 'com.fasterxml.jackson.core:jackson-databind'
     testImplementation 'io.projectreactor:reactor-test'
 }
