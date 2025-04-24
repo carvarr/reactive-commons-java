@@ -1,31 +1,56 @@
-subprojects {
-    apply plugin: "java"
-    apply plugin: "jacoco"
-    apply plugin: 'io.spring.dependency-management'
+allprojects {
+    apply plugin: 'java'
+    apply plugin: 'jacoco'
 
-    sourceCompatibility = JavaVersion.VERSION_1_8
- 
-    task sourcesJar(type: Jar, dependsOn: classes) {
-        classifier = 'sources'
-        from sourceSets.main.allSource
-    }
-
-    javadoc.failOnError = false
-    task javadocJar(type: Jar, dependsOn: javadoc) {
-        classifier = 'javadoc'
-        from javadoc.destinationDir
-    }
-
-    artifacts {
-        archives sourcesJar
-        archives javadocJar
+    java {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
 
     repositories {
         mavenCentral()
-        maven { url "https://repo.spring.io/snapshot" }
-        maven { url "https://repo.spring.io/milestone" }
+        maven { url = 'https://repo.spring.io/snapshot' }
+        maven { url = 'https://repo.spring.io/milestone' }
     }
+
+    if (toPublish.split(',').contains(project.name) || project.name == rootProject.name) {
+
+        sonar {
+            properties {
+                property "sonar.sourceEncoding", "UTF-8"
+                property 'sonar.projectKey', 'reactive-commons_reactive-commons-java'
+                property 'sonar.organization', 'reactive-commons'
+                property 'sonar.host.url', 'https://sonarcloud.io'
+                property "sonar.sources", "src/main"
+                property "sonar.test", "src/test"
+                property "sonar.java.binaries", "build/classes"
+                property "sonar.junit.reportPaths", "build/test-results/test"
+                property "sonar.java-coveragePlugin", "jacoco"
+                property "sonar.coverage.jacoco.xmlReportPaths", "${rootDir}/build/reports/jacoco/generateMergedReport/generateMergedReport.xml"
+                property "sonar.exclusions", ".github/**,samples/**/*,**/mybroker/**/*,**/standalone/**/*"
+                property 'sonar.coverage.exclusions', 'samples/**/*'
+            }
+        }
+    }
+
+    group = 'org.reactivecommons'
+}
+
+nexusPublishing {
+    repositories {
+        sonatype()
+    }
+}
+
+subprojects {
+    apply plugin: 'java-library'
+    apply plugin: 'io.spring.dependency-management'
+
+    ext {
+        groupId = 'org.reactivecommons'
+    }
+
+    group = groupId
 
     dependencies {
         testImplementation 'org.springframework.boot:spring-boot-starter-test'
@@ -36,19 +61,122 @@ subprojects {
         testCompileOnly 'org.projectlombok:lombok'
     }
 
+    test.finalizedBy(project.tasks.jacocoTestReport)
+
     jacocoTestReport {
+        dependsOn test
         reports {
-            xml.enabled true
+            xml.setRequired true
+            html.setRequired true
+            csv.setRequired false
         }
     }
 
     test {
         useJUnitPlatform()
+        if (System.getProperty("env.ci") == "true") {
+            systemProperty "env.ci", System.getProperty("env.ci")
+        }
+
     }
 
     dependencyManagement {
         imports {
-            mavenBom "org.springframework.boot:spring-boot-dependencies:$springBootVersion"
+            mavenBom 'org.springframework.boot:spring-boot-dependencies:3.4.4'
         }
     }
+
+    if (toPublish.split(',').contains(it.name)) {
+        apply plugin: 'maven-publish'
+        apply plugin: 'signing'
+
+        group = groupId
+
+        tasks.named("jar") {
+            enabled = true
+            archiveClassifier = ''
+        }
+
+        java {
+            withJavadocJar()
+            withSourcesJar()
+        }
+
+        javadoc {
+            if (JavaVersion.current().isJava9Compatible()) {
+                options.addBooleanOption('html5', true)
+            }
+        }
+        javadoc.failOnError = false
+
+        tasks.withType(GenerateModuleMetadata).configureEach {
+            enabled = false
+        }
+
+        publishing {
+            publications {
+                mavenJava(MavenPublication) {
+                    pom {
+                        name = artifactId
+                        description = 'Abstract your broker with semantic async messages'
+                        url = 'https://reactivecommons.org/reactive-commons-java'
+                        licenses {
+                            license {
+                                name = 'The Apache Software License, Version 2.0'
+                                url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                                distribution = 'repo'
+                            }
+                        }
+                        developers {
+                            developer {
+                                id = 'danielbustamante'
+                                name = 'Daniel Bustamante Ospina'
+                                email = 'danibust@bancolombia.com.co'
+                            }
+                            developer {
+                                id = "juancgalvis"
+                                name = "Juan Carlos Galvis"
+                                email = "juanc.galvis@outlook.com"
+                            }
+                        }
+                        scm {
+                            url = 'git@github.com:reactive-commons/reactive-commons-java.git'
+                        }
+                    }
+
+                    from components.java
+
+                    groupId = groupId
+                    artifactId = artifactId
+                    version = project.property('version')
+                }
+            }
+        }
+
+        if (project.hasProperty('signing.keyId')) {
+            signing {
+                sign publishing.publications.mavenJava
+            }
+        }
+    }
+}
+
+tasks.register('generateMergedReport', JacocoReport) {
+    dependsOn test
+    dependsOn subprojects.test
+    dependsOn subprojects.javadoc
+    dependsOn subprojects.jacocoTestReport
+    additionalSourceDirs.setFrom files(subprojects.sourceSets.main.allSource.srcDirs)
+    sourceDirectories.setFrom files(subprojects.sourceSets.main.allSource.srcDirs)
+    classDirectories.setFrom files(subprojects.sourceSets.main.output).filter({ !it.toString().contains("sample") })
+    executionData.setFrom project.fileTree(dir: '.', include: '**/build/jacoco/test.exec')
+    reports {
+        xml.setRequired true
+        csv.setRequired false
+        html.setRequired true
+    }
+}
+
+tasks.named('wrapper') {
+    gradleVersion = '8.12.1'
 }

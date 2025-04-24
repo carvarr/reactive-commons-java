@@ -4,7 +4,7 @@ import org.junit.jupiter.api.Test;
 import org.reactivecommons.api.domain.DomainEvent;
 import org.reactivecommons.api.domain.DomainEventBus;
 import org.reactivecommons.async.api.DynamicRegistry;
-import org.reactivecommons.async.api.handlers.EventHandler;
+import org.reactivecommons.async.api.handlers.DomainEventHandler;
 import org.reactivecommons.async.impl.config.annotations.EnableDomainEventBus;
 import org.reactivecommons.async.impl.config.annotations.EnableMessageListeners;
 import org.reactivestreams.Publisher;
@@ -13,7 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.test.context.SpringBootTest;
-import reactor.core.publisher.UnicastProcessor;
+import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
 import java.time.Duration;
@@ -22,7 +22,7 @@ import static reactor.core.publisher.Mono.from;
 import static reactor.core.publisher.Mono.fromRunnable;
 
 @SpringBootTest
-public class DynamicRegistryTest {
+class DynamicRegistryTest {
 
     @Autowired
     private DomainEventBus eventBus;
@@ -34,21 +34,20 @@ public class DynamicRegistryTest {
     private String appName;
 
     @Test
-    public void shouldReceiveResponse() {
-        UnicastProcessor<String> result = UnicastProcessor.create();
-        EventHandler<String> fn = message -> fromRunnable(() -> result.onNext(message.getData()));
+    void shouldReceiveResponse() {
+        Sinks.Many<String> result = Sinks.many().unicast().onBackpressureBuffer();
+        DomainEventHandler<String> fn = message -> fromRunnable(
+                () -> result.emitNext(message.getData(), Sinks.EmitFailureHandler.FAIL_FAST)
+        );
 
         dynamicRegistry.listenEvent("test.event", fn, String.class).block();
         final Publisher<Void> emit = eventBus.emit(new DomainEvent<>("test.event", "42", "Hello"));
         from(emit).block();
 
-        StepVerifier.create(result.next().timeout(Duration.ofSeconds(10)))
+        StepVerifier.create(result.asFlux().next().timeout(Duration.ofSeconds(10)))
                 .expectNext("Hello")
                 .verifyComplete();
-
-
     }
-
 
     @SpringBootApplication
     @EnableMessageListeners
@@ -57,6 +56,5 @@ public class DynamicRegistryTest {
         public static void main(String[] args) {
             SpringApplication.run(App.class, args);
         }
-
     }
 }
